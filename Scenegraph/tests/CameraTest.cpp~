@@ -1,0 +1,129 @@
+#include <gtest/gtest.h>
+#include <Graphics/Graphics.hpp>
+#include <Scenegraph/Camera.hpp>
+#include <Scenegraph/PointLight.hpp>
+#include <Scenegraph/Scenegraph.hpp>
+
+using namespace boost;
+using namespace Eigen;
+using namespace rtrt;
+using namespace rtrt::scenegraph;
+using namespace rtrt::scenegraph::cameraStash;
+
+class CameraTest : public testing::Test
+{
+public:
+};
+
+/*
+void PhongMaterialTest::checkColor( const Color3f& vector, const Color3f& expected )
+{
+  EXPECT_FLOAT_EQ( vector.x(), expected.x() );
+  EXPECT_FLOAT_EQ( vector.y(), expected.y() );
+  EXPECT_FLOAT_EQ( vector.z(), expected.z() );
+}
+*/
+
+TEST_F( CameraTest, Creating )
+{
+  Camera camera;
+  EXPECT_TRUE( camera.transform().isApprox( static_cast< Transform3f >( Transform3f::Identity() )));
+
+  Transform3f transform( Translation3f( 1., 2., 3. ));
+
+  CameraPtr cameraPtr( Camera::create( transform ));
+  ASSERT_TRUE( cameraPtr != NULL );
+   
+  EXPECT_TRUE( cameraPtr->transform().isApprox( transform ));
+    
+  cameraPtr = Camera::create( BaseCameraPtr( new WorldCamera( transform )));
+  ASSERT_TRUE( cameraPtr != NULL );
+
+  EXPECT_TRUE( cameraPtr->transform().isApprox( transform ));
+}
+
+TEST_F( CameraTest, Accessing )
+{
+  BaseCameraPtr base( new LocalCamera );
+  base->rotate( Vector3f( 1., 2., 3. ));
+
+  Camera camera( base );
+  
+  EXPECT_TRUE( camera.transform().isApprox( base->transform() ));
+
+  BaseCameraPtr world( new WorldCamera );
+  world->rotate( Vector3f( 4., 5., 6. ));
+  camera.setCamera( world );
+
+  EXPECT_TRUE( camera.transform().isApprox( world->transform() ));
+}
+
+TEST_F( CameraTest, LocalGlobalConversion )
+{
+  Camera camera;
+
+  BaseCameraPtr local( new LocalCamera() );
+  BaseCameraPtr world( new WorldCamera() );
+
+  camera.setLocal();
+
+  local->rotate( Vector3f( 1., 2., 3. ));
+  world->rotate( Vector3f( 1., 2., 3. ));
+  camera.rotate( Vector3f( 1., 2., 3. ));
+
+  EXPECT_TRUE( camera.transform().isApprox( local->transform() ));
+  EXPECT_FALSE( camera.transform().isApprox( world->transform() ));
+
+  camera.setTransform( static_cast< Eigen::Transform3f >( Eigen::Transform3f::Identity() ));
+  camera.setWorld();
+
+  camera.rotate( Vector3f( 1., 2., 3. ));
+
+  EXPECT_FALSE( camera.transform().isApprox( local->transform() ));
+  EXPECT_TRUE( camera.transform().isApprox( world->transform() ));
+}
+
+TEST_F( CameraTest, UpdateTest )
+{
+  Camera camera;
+  Time time( 213 );
+
+  EXPECT_TRUE( camera.isOld( time ));
+
+  camera.rotate( Vector3f( 1., 2., 3. ));
+  EXPECT_TRUE( camera.isNew( time ));
+
+  camera.resolveNewest( time );
+  time++;
+
+  camera.translate( Vector3f( 1., 2., 3. ));
+  EXPECT_TRUE( camera.isNew( time ));
+
+  camera.resolveNewest( time );
+  time++;
+
+  camera.setTransform( camera.transform() );
+  EXPECT_TRUE( camera.isNew( time ));
+
+  camera.resolveNewest( time );
+  time++;
+
+  camera.setCamera( BaseCameraPtr( new WorldCamera() ));
+  EXPECT_TRUE( camera.isNew( time ));
+}
+
+TEST_F( CameraTest, TransformTest )
+{
+  CameraPtr camera( Camera::create() );
+//  camera->translate( Vector3f( 2., 3., 4. ));
+
+  NodePtr node( Node::create( camera ));
+
+//  node->childs() += Node::create( PointLight::create( Vector4f( 1., 2., 3., 1. ), Color3f( 1., 1., 1. )));
+
+  node->update( 0.0 );
+
+//  PointLightStashPtr lights = SCENEGRAPH_STASH( PointLightStash, node );
+//  ASSERT_TRUE( lights != NULL );
+}
+

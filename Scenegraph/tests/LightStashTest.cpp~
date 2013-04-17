@@ -1,0 +1,207 @@
+#include <gtest/gtest.h>
+#include <boost/foreach.hpp>
+#include <boost/assign/std/vector.hpp>
+#include <Scenegraph/ModelStash.hpp>
+#include <Scenegraph/StaticModel.hpp>
+#include "StaticModels.hpp"
+
+using namespace boost::assign;
+using namespace Eigen;
+using namespace rtrt;
+using namespace rtrt::scenegraph;
+using namespace rtrt::scenegraph::modelStash;
+
+class ModelStashTest : public testing::Test, public StaticModels
+{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  void SetUp();
+};
+
+void ModelStashTest::SetUp()
+{
+  setup();
+}
+
+
+TEST_F( ModelStashTest, EmptyStash )
+{
+  checkStash();
+}
+
+TEST_F( ModelStashTest, AddingModelToStash )
+{
+  std::vector< size_t > objectIndices;
+  objectIndices += 0, 0;
+
+  stash->addObject( node1.get() );
+
+  model1->allocate();
+
+  stash->writeObject( node1.get() );
+
+  checkStash( *model1 );
+
+  model1->free();
+  stash->removeObject( node1.get() );
+
+  checkStash();
+}
+
+TEST_F( ModelStashTest, AddingSeveralObjects )
+{
+  stash->addObject( node1.get() );
+  stash->addObject( node2.get() );
+  stash->addObject( node3.get() );
+
+  model1->allocate();
+  model2->allocate();
+  model3->allocate();
+
+  stash->writeObject( node1.get() );
+  stash->writeObject( node2.get() );
+  stash->writeObject( node3.get() );
+
+  checkStash( *model1, *model2, *model3 );
+
+  model2->free();
+  checkStash( *model1, *model3, 0, 2 );
+
+  stash->removeObject( node2.get() );
+  checkStash( *model1, *model3 );
+
+  model1->free();
+  checkStash( *model3, 1 );
+
+  model1->allocate();
+  stash->writeObject( node1.get() );
+  checkStash( *model1, *model3 );
+
+  stash->removeObject( node1.get() );
+  checkStash( *model3 );
+
+  stash->removeObject( node3.get() );
+  checkStash();
+}
+
+TEST_F( ModelStashTest, TransformTest )
+{
+  stash->addObject( node1.get() );
+  model1->allocate();
+
+  AttributeList list;
+  SCENEGRAPH_SET_ATTRIBUTE( static_cast< Transform3f >( Scaling3f( 2.0, 0.5, 1.0 )), Transform, list );
+
+  stash->writeObject( node1.get(), list );
+
+  VertexArray transformedVertices;
+  transformedVertices += Vector4f( 2.0, 1.0, 3.0, -1.0 ),
+    Vector4f( 3.0, .25, -3.7, 1.4 );
+    
+  NormalArray transformedNormals;
+  transformedNormals += Vector3f( 0.1, 0.6, 0.5 ),
+    Vector3f( 0.15, 1.4, 0.2 );
+
+  EXPECT_TRUE( stash->vertices() == transformedVertices );
+  EXPECT_TRUE( stash->normals() == transformedNormals );
+
+  stash->addObject( node3.get() );
+
+  model3->allocate();
+
+  stash->writeObject( node3.get(), list );
+
+  transformedVertices += Vector4f( 6.0, 0.5, 2.0, 1.0 ),
+    Vector4f( 4.6, 0.7, 2.2, .8 );
+
+  transformedNormals += Vector3f( 1.4, -7.2, 2.5 ),
+    Vector3f( 0.5, 4.4, 1.3 );
+
+  EXPECT_TRUE( stash->vertices() == transformedVertices );
+  EXPECT_TRUE( stash->normals() == transformedNormals );
+
+  model1->free();
+  stash->removeObject( node1.get() );
+
+  transformedVertices.clear();
+  transformedVertices += Vector4f( 6.0, 0.5, 2.0, 1.0 ),
+    Vector4f( 4.6, 0.7, 2.2, .8 );
+
+  transformedNormals.clear();
+  transformedNormals += Vector3f( 1.4, -7.2, 2.5 ),
+    Vector3f( 0.5, 4.4, 1.3 );
+
+  EXPECT_TRUE( stash->vertices() == transformedVertices );
+  EXPECT_TRUE( stash->normals() == transformedNormals );
+}
+
+TEST_F( ModelStashTest, UpdateTest )
+{
+  Time time( 213 );
+
+  EXPECT_TRUE( model1->isNew( time ));
+  model1->resolveNewest( time );
+
+  EXPECT_TRUE( model1->isNew( time ));
+
+  time++;
+  EXPECT_TRUE( model1->isOld( time ));
+}
+
+TEST_F( ModelStashTest, stashUpdateTest )
+{
+  Time time( 213 );
+  EXPECT_TRUE( stash->isOld( time ));
+
+  stash->addObject( node1.get() );
+  EXPECT_TRUE( stash->isOld( time ));
+
+  model1->allocate();
+  EXPECT_TRUE( stash->isNew( time ));
+
+  stash->resolveNewest( time );
+  time++;
+  EXPECT_TRUE( stash->isOld( time ));
+
+  stash->writeObject( node1.get() );
+  EXPECT_TRUE( stash->isNew( time ));
+
+  stash->resolveNewest( time );
+  time++;
+  EXPECT_TRUE( stash->isOld( time ));
+
+  model1->free();
+  EXPECT_TRUE( stash->isNew( time ));
+
+  stash->resolveNewest( time );
+  time++;
+  EXPECT_TRUE( stash->isOld( time ));
+
+  stash->removeObject( node1.get() );
+  EXPECT_TRUE( stash->isOld( time ));
+}
+
+TEST_F( ModelStashTest, MultipleNodesOneModel )
+{
+  node2->setKernel( model1 );
+  node3->setKernel( model1 );
+
+  stash->addObject( node1.get() );
+  stash->addObject( node2.get() );
+  stash->addObject( node3.get() );
+
+  model1->assignNode( node1.get() );
+  model1->allocate();
+
+  model1->assignNode( node2.get() );
+  model1->allocate();
+
+  model1->assignNode( node3.get() );
+  model1->allocate();
+
+  stash->writeObject( node1.get() );
+  stash->writeObject( node2.get() );
+  stash->writeObject( node3.get() );
+
+  checkStash( *model1, *model1, *model1 );
+}
